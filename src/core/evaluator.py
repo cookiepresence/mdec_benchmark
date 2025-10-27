@@ -13,7 +13,7 @@ from src.tools import TableFormatter, blend_stereo, to_inv, to_scaled
 from src.typing import ArrDict, Metrics
 from .metrics import metrics_benchmark, metrics_eigen, metrics_ibims, metrics_pointcloud
 
-__all__ = ['predict_depths', 'MonoDepthEvaluator']
+__all__ = ['predict_depths', 'predict_depth_single', 'MonoDepthEvaluator']
 
 
 @torch.no_grad()
@@ -35,20 +35,34 @@ def predict_depths(net: nn.Module,
     """
     preds = []
     for x, *_ in tqdm(loader):
-        imgs = x['imgs'].to(device)
-        if use_stereo_blend: imgs = torch.cat((imgs, imgs.flip(dims=[-1])))
-
-        disp = net(imgs)['disp'][0]  # (b, 1, h, w)
-        if use_stereo_blend:
-            b = disp.shape[0]//2
-            disp = blend_stereo(disp[:b], disp[b:].flip(dims=[-1]))
-
-        preds.append(disp.cpu())
+        img = x['imgs'].to(device)
+        preds.append(predict_depth_single(net, img, min, max, use_stereo_blend).cpu())
 
     preds = torch.cat(preds)
     preds = to_scaled(preds, min=min, max=max)[0]
     return preds
 
+@torch.no_grad()
+def predict_depth_single(net: nn.Module,
+                   img: Tensor,
+                   min: float = 0.1,
+                   max: float = 100,
+                   use_stereo_blend: bool = False) -> Tensor:
+    """Compute dataset scaled disparity predictions for a trained network.
+
+    :param net: (nn.Module) Pretrained depth estimation network.
+    :param loader: (Image) Image to compute predictions for
+    :param min: (float) Min depth used to scale sigmoid disparities.
+    :param max: (float) Max depth used to scale sigmoid disparities.
+    :param use_stereo_blend: (bool) If `True`, apply virtual stereo blending from the flipped image.
+    :return: (Tensor) (1, h, w) Scaled predicted disparity.
+    """
+    if use_stereo_blend: img = torch.cat((img, img.flip(dims=[-1])))
+    disp = net(img)['disp'][0]  # (b, 1, h, w)
+    if use_stereo_blend:
+        b = disp.shape[0]//2
+        disp = blend_stereo(disp[:b], disp[b:].flip(dims=[-1]))
+    return disp
 
 class MonoDepthEvaluator:
     """Class to evaluate unscaled network depth predictions.
@@ -67,7 +81,7 @@ class MonoDepthEvaluator:
 
     def __init__(self,
                  mode: str,
-                 metrics: Sequence[str] = ('benchmark', 'pointcloud'),
+                 metrics: Sequence[str] = ('benchmark',),
                  min: float = 1e-3,
                  max: float = 100,
                  use_eigen_crop: bool = False):
@@ -139,7 +153,8 @@ class MonoDepthEvaluator:
         pred_mask = pred[mask]
         target_mask = target[mask]
 
-        ms = {'Ratio': r}
+        # ms = {'Ratio': r}
+        ms = {}
         if cat: ms['Cat'] = str(cat)
         if subcat: ms['SubCat'] = str(subcat)
 
@@ -174,18 +189,17 @@ class MonoDepthEvaluator:
         if cats is None: cats = [None]*len(ts)
         if subcats is None: subcats = [None]*len(ts)
 
-        print('\n-> Computing metrics...')
         metrics = [self._eval_single(p, t, m, K, c1, c2, [m for m in self.metrics if m != 'ibims'])
-                   for p, t, m, K, c1, c2 in zip(tqdm(ps), ts, ms, Ks, cats, subcats)]
+                   for p, t, m, K, c1, c2 in zip(ps, ts, ms, Ks, cats, subcats)]
         if edges is not None:
             print('\n-> Computing edges-based metrics...')
             ms = [m1 & m2 for m1, m2 in zip(ms, edges)]
             metrics_edge = [self._eval_single(p, t, m, K, c1, c2, self.metrics)
-                            for p, t, m, K, c1, c2 in zip(tqdm(ps), ts, ms, Ks, cats, subcats)]
+                            for p, t, m, K, c1, c2 in zip(ps, ts, ms, Ks, cats, subcats)]
             metrics_edge = [{f'{k}-Edges': v for k, v in m.items()} for m in metrics_edge]
             metrics = [{**m1, **m2} for m1, m2 in zip(metrics, metrics_edge)]
 
         assert len(metrics) == len(ts), f'Non-matching metrics and targets! ({len(metrics)} vs. {len(ts)})'
         metrics = [m for m in metrics if m]
-        self._summarize(metrics)
+        # self._summarize(metrics)
         return metrics
