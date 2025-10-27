@@ -15,7 +15,6 @@ static methods.
 import torch
 import re
 import collections
-from torch._six import string_classes
 
 from .timers import MultiLevelTimer, Timer
 
@@ -75,7 +74,7 @@ def default_convert(data):
         return elem_type(*(default_convert(d) for d in data))
     elif isinstance(data, tuple):
         return [default_convert(d) for d in data]  # Backwards compatibility.
-    elif isinstance(data, collections.abc.Sequence) and not isinstance(data, string_classes):
+    elif isinstance(data, collections.abc.Sequence) and not isinstance(data, str):
         try:
             return elem_type([default_convert(d) for d in data])
         except TypeError:
@@ -162,7 +161,7 @@ def default_collate(batch):
         return torch.tensor(batch, dtype=torch.float64)
     elif isinstance(elem, int):
         return torch.tensor(batch)
-    elif isinstance(elem, string_classes):
+    elif isinstance(elem, str):
         return batch
     elif isinstance(elem, (Timer, MultiLevelTimer)):  # @jspenmar: Only change.
         return batch
