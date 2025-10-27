@@ -24,12 +24,12 @@ def readlines(file: PathLike, /, encoding=None) -> list[str]:
 
 # IMAGE CONVERSION
 # ------------------------------------------------------------------------------
-def pil2np(img: Image, /) -> NDArray:
+def pil2np(img: Image.Image, /) -> NDArray:
     """Convert PIL image [0, 255] into numpy [0, 1]."""
     return np.array(img, dtype=np.float32) / 255.  # Default is float64!
 
 
-def np2pil(arr: NDArray, /) -> Image:
+def np2pil(arr: NDArray, /) -> Image.Image:
     """Convert numpy image [0, 1] into PIL [0, 255]."""
     return Image.fromarray((arr * 255).astype(np.uint8))
 # ------------------------------------------------------------------------------
