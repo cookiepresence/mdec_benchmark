@@ -6,6 +6,7 @@ from collections.abc import Sequence
 
 import numpy as np
 from numpy.typing import NDArray
+from PIL import Image
 from torch.utils.data import DataLoader
 import transformers
 import tqdm
@@ -94,7 +95,6 @@ def compute_eval_preds(ckpt_file: Union[str, Path], cfg: dict, mode: str, overwr
 
     # model = mod.nets['depth'].to(device)
 
-
     image_processor = transformers.AutoImageProcessor.from_pretrained("depth-anything/Depth-Anything-V2-Small-hf", use_fast=True, ensure_multiple_of=14)
     model = transformers.AutoModelForDepthEstimation.from_pretrained("depth-anything/Depth-Anything-V2-Small-hf", device_map='auto')
     evaluator = MonoDepthEvaluator(mode=mode, **cfg_args)
@@ -103,12 +103,17 @@ def compute_eval_preds(ckpt_file: Union[str, Path], cfg: dict, mode: str, overwr
     for data in tqdm.tqdm(dl):
         x, y, m = data
         img = x['imgs'].to(device)
-        inputs = image_processor(images=img, return_tensors='pt')
-        preds = model(**inputs).predicted_depth
+        # inputs = image_processor(images=img, return_tensors='pt')
+        preds = model(pixel_values=img).predicted_depth
         preds = preds.cpu().numpy()
         y = {k: v.cpu().numpy() for k, v in y.items()}
-        metrics.append(evaluator.run(preds, y, pred_type='disparity'))
+        for e, i in enumerate(preds):
+            i = (i - i.min()) / (i.max() - i.min())
+            x = Image.fromarray(np.uint8(255 * i))
+            x.save(f'artifacts/preds_{e:04}.png')
+        metrics.extend(evaluator.run(preds, y, pred_type='disparity'))
         print(metrics)
+        break
     return metrics
 
 if __name__ == '__main__':

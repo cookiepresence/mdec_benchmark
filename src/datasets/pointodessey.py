@@ -44,7 +44,7 @@ class PointOdesseyDataset(BaseDataset):
     def __init__(
             self,
             mode: Literal['train', 'val', 'test', 'sample'],
-            size: tuple[int, int] = (960, 540),
+            size: tuple[int, int] = (924, 518),
             data_root: Path = Path('/scratch/mde/pointodessey'),
             **kwargs: dict[Any, Any]
     ):
@@ -91,7 +91,7 @@ class PointOdesseyDataset(BaseDataset):
             y['imgs'] = np.array(img_res, dtype=np.float32)
 
         with self.timer('Depth'):
-            y['depth'] = np.array(self.load_depth(depth))
+            y['depth'] = np.array(self.load_depth(depth), dtype=np.float32)
         
         return x, y, m
 
@@ -112,10 +112,10 @@ class PointOdesseyDataset(BaseDataset):
         """
         return ValueError("no edges for pointodessey!")
 
-    # def transform(self, x: dict, y: dict, m: dict) -> BatchData:
-    #     """Apply ImageNet standarization to the images processed by the network `x`."""
-    #     x['imgs'] = ops.standardize(x['imgs'])
-    #     return x, y, m
+    def transform(self, x: dict, y: dict, m: dict) -> BatchData:
+        """Apply ImageNet standarization to the images processed by the network `x`."""
+        x['imgs'] = ops.standardize(x['imgs'])
+        return x, y, m
 
     def create_axs(self) -> Axes:
         """Create the axis structure required for plotting."""
